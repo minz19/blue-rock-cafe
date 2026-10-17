@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Owner – Blu Rock Cafe</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eaf0f3;--card:#fbfdfe;--ink:#17214f;--mute:#5d6786;--line:#c9d4db;--acc:#e0a100;--accink:#17214f;--ok:#1d7a4d;--bad:#b3342b}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1530;--card:#171f45;--ink:#e9edff;--mute:#9aa5cf;--line:#2b366b;--acc:#f0b429;--accink:#10162f;--ok:#4cc38a;--bad:#ff8379}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Bricolage Grotesque',system-ui,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:16px;padding-top:max(16px,env(safe-area-inset-top))}
+h1{font-size:28px;font-weight:800;margin:0}h2{font-size:20px;margin:0 0 10px}
+.sub{color:var(--mute);font-size:14px}.ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+nav{display:flex;gap:6px;margin:12px 0;border-bottom:2px solid var(--line)}
+nav button{background:none;border:0;color:var(--mute);padding:10px 14px;border-bottom:3px solid transparent;margin-bottom:-2px}
+nav button.on{color:var(--ink);border-color:var(--acc)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}.grid .card{margin:0}
+.tag{border-radius:20px;padding:2px 10px;font-size:13px;font-weight:700;background:var(--line)}.tag.new{background:var(--acc);color:var(--accink)}.tag.ready{background:var(--ok);color:#fff}
+ul{margin:8px 0;padding-left:18px}
+input,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+label{display:block;font-size:13px;color:var(--mute);margin:8px 0 3px}
+.row{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+button{font:700 15px inherit;font-family:inherit;cursor:pointer}
+.btn{background:var(--acc);color:var(--accink);border:0;border-radius:8px;padding:9px 14px}
+.btn.ghost{background:none;border:1px solid var(--line);color:var(--ink)}.btn.sm{padding:5px 10px;font-size:13px}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.m{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.m img,.m .tile{width:56px;height:56px;border-radius:8px;object-fit:cover}.m .tile{background:var(--bg);border:1px dashed var(--line)}
+.m .n{flex:1;min-width:120px}.m input[type=number]{width:100px}
+input:focus-visible,button:focus-visible{outline:3px solid var(--acc);outline-offset:1px}
+#rc{display:none}
+@media print{body>*:not(#rc){display:none!important}#rc{display:block;width:72mm;font:12px/1.4 monospace;color:#000}#rc h3{text-align:center;margin:0}#rc .l{display:flex;justify-content:space-between}}
+@page{margin:3mm}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div id="rc"></div>
+<script>
+var sb=supabase.createClient(CFG.url,CFG.key),ac=null,tab='orders',orders=[],menu=[],user=null,subbed=false;
+function esc(t){return String(t==null?'':t).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function money(n){try{return new Intl.NumberFormat(undefined,{style:'currency',currency:CFG.cur,maximumFractionDigits:2}).format(n||0)}catch(e){return n}}
+function code(o){return o.id.slice(0,4).toUpperCase()}
+function prime(){try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume()}catch(e){}}
+function chime(){try{prime();var t=ac.currentTime;[784,988,1319].forEach(function(f,i){var o=ac.createOscillator(),g=ac.createGain(),s=t+i*.16;o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(.3,s+.02);g.gain.exponentialRampToValueAtTime(.001,s+.5);o.connect(g);g.connect(ac.destination);o.start(s);o.stop(s+.55)})}catch(e){}}
+document.addEventListener('click',prime);
+function login(){prime();var em=document.getElementById('em').value.trim(),pw=document.getElementById('pw').value;
+ sb.auth.signInWithPassword({email:em,password:pw}).then(function(r){if(r.error){document.getElementById('er').textContent='Wrong email or password.';return}user=r.data.user;boot()})}
+function logout(){sb.auth.signOut().then(function(){user=null;orders=[];render()})}
+function boot(){loadOrders();loadMenu();if(!subbed){subbed=true;
+ sb.channel('o').on('postgres_changes',{event:'*',schema:'public',table:'cafe_orders'},function(p){if(p.eventType==='INSERT')chime();loadOrders()}).subscribe();
+ setInterval(function(){if(user)loadOrders()},30000)}render()}
+function loadOrders(){sb.from('cafe_orders').select('*').order('created_at',{ascending:false}).limit(80).then(function(r){orders=r.data||[];if(user&&tab==='orders')render()})}
+function loadMenu(){sb.from('cafe_products').select('*').order('created_at').then(function(r){menu=r.data||[];if(user&&tab==='menu')render()})}
+function go(t){tab=t;render()}
+function render(){
+ var a=document.getElementById('app');
+ if(!user){a.innerHTML='<div class="card" style="margin-top:30px;max-width:420px"><h2>Owner login</h2><label>Email</label><input id="em" type="email" autocomplete="username"><label>Password</label><input id="pw" type="password" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')login()"><p id="er" class="bad"></p><button class="btn" onclick="login()">Log in</button></div>';return}
+ a.innerHTML='<div class="top"><div><h1>'+esc(CFG.name)+'</h1><div class="sub">Owner dashboard</div></div><button class="btn ghost sm" onclick="logout()">Log out</button></div><nav><button class="'+(tab==='orders'?'on':'')+'" onclick="go(\'orders\')">Orders</button><button class="'+(tab==='menu'?'on':'')+'" onclick="go(\'menu\')">Menu</button></nav>'+(tab==='orders'?ordersView():menuView());
+}
+function ordersView(){
+ var td=new Date().toDateString(),today=orders.filter(function(o){return new Date(o.created_at).toDateString()===td}),paid=0;
+ today.forEach(function(o){if(o.paid)paid+=o.total});
+ var open=orders.filter(function(o){return o.status!=='done'}),dn=today.filter(function(o){return o.status==='done'});
+ return '<div class="card"><b>Today:</b> '+today.length+' orders · '+money(paid)+' paid · '+open.length+' open</div><h2>Open orders</h2>'+(open.length?'<div class="grid">'+open.map(card).join('')+'</div>':'<p class="sub">No open orders. New orders appear here with a sound.</p>')+(dn.length?'<h2 style="margin-top:18px">Done today</h2><div class="grid">'+dn.map(card).join('')+'</div>':'');
+}
+function card(o){
+ var nx={new:['preparing','Start preparing'],preparing:['ready','Mark ready'],ready:['done','Mark done']}[o.status];
+ return '<div class="card"><div class="top"><b>#'+code(o)+'</b><span class="tag '+esc(o.status)+'">'+esc(o.status)+'</span></div><div class="sub">'+(o.table_no?'Table '+esc(o.table_no)+' · ':'')+esc(o.customer_name)+(o.phone?' · '+esc(o.phone):'')+' · '+new Date(o.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+'</div><ul>'+o.items.map(function(i){return '<li>'+esc(i.qty)+' × '+esc(i.name)+'</li>'}).join('')+'</ul><div class="top"><b>'+money(o.total)+'</b><span class="'+(o.paid?'ok':'bad')+'">'+(o.paid?'Paid':'Unpaid')+'</span></div><div class="actions">'+(nx?'<button class="btn" onclick="setSt(\''+o.id+'\',\''+nx[0]+'\')">'+nx[1]+'</button>':'')+(o.paid?'':'<button class="btn ghost" onclick="pay(\''+o.id+'\')">Mark paid</button>')+'<button class="btn ghost" onclick="printO(\''+o.id+'\')">Print receipt</button></div></div>';
+}
+function setSt(id,s){sb.from('cafe_orders').update({status:s}).eq('id',id).then(loadOrders)}
+function pay(id){sb.from('cafe_orders').update({paid:true}).eq('id',id).then(loadOrders)}
+function printO(id){var o=orders.find(function(x){return x.id===id});if(!o)return;
+ document.getElementById('rc').innerHTML='<h3>'+esc(CFG.name)+'</h3><div>#'+code(o)+' · '+new Date(o.created_at).toLocaleString()+'</div><div>'+(o.table_no?'Table '+esc(o.table_no)+' · ':'')+esc(o.customer_name)+'</div><hr>'+o.items.map(function(i){return '<div class="l"><span>'+esc(i.qty)+' x '+esc(i.name)+'</span><span>'+money(i.qty*i.price)+'</span></div>'}).join('')+'<hr><div class="l"><b>Total</b><b>'+money(o.total)+'</b></div><div>'+(o.paid?'PAID':'UNPAID')+'</div><div style="text-align:center;margin-top:6px">Thank you!</div>';
+ window.print()}
+function menuView(){
+ return '<div class="card"><h2>Add a dish</h2><div class="row"><div><label>Name</label><input id="mn"></div><div><label>Price</label><input id="mp" type="number" min="0" step="any"></div><div><label>Photo</label><input id="mf" type="file" accept="image/*"></div></div><p><button class="btn" onclick="addItem()">Save dish</button></p></div><div class="card"><h2>Menu</h2>'+(menu.length?menu.map(mrow).join(''):'<p class="sub">No dishes yet. Add your first one above.</p>')+'</div><div class="card"><h2>Customer QR code</h2><div class="sub">Print it and put it on each table. Customers scan it and order from their own phone.</div><label>Table number (leave empty for one general code)</label><input id="qt" style="max-width:160px"><p><button class="btn" onclick="qr()">Make QR code</button></p><div id="qr"></div><div class="sub" id="qu" style="word-break:break-all"></div></div>';
+}
+function mrow(p){
+ return '<div class="m">'+(p.img_url?'<img src="'+esc(p.img_url)+'" alt="">':'<div class="tile"></div>')+'<div class="n"><b>'+esc(p.name)+'</b>'+(p.active?'':' <span class="sub">(hidden)</span>')+'</div><input type="number" min="0" step="any" value="'+p.price+'" onchange="updP(\''+p.id+'\',this.value)" aria-label="Price of '+esc(p.name)+'"><label class="btn ghost sm" style="margin:0;cursor:pointer;color:var(--ink)">Photo<input type="file" accept="image/*" style="display:none" onchange="newPhoto(\''+p.id+'\',this.files[0])"></label><button class="btn ghost sm" onclick="toggle(\''+p.id+'\','+(!p.active)+')">'+(p.active?'Hide':'Show')+'</button><button class="btn ghost sm" onclick="delP(\''+p.id+'\')">Delete</button></div>';
+}
+function shrink(f){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){var im=new Image();im.onload=function(){var s=Math.min(1,700/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(function(b){res(b)},'image/jpeg',.8)};im.onerror=rej;im.src=r.result};r.onerror=rej;r.readAsDataURL(f)})}
+function upload(f){return shrink(f).then(function(b){var path=crypto.randomUUID()+'.jpg';return sb.storage.from('dishes').upload(path,b,{contentType:'image/jpeg'}).then(function(r){if(r.error)throw r.error;return sb.storage.from('dishes').getPublicUrl(path).data.publicUrl})})}
+function addItem(){var n=document.getElementById('mn').value.trim(),pv=document.getElementById('mp').value,f=document.getElementById('mf').files[0];
+ if(!n||pv===''){alert('Enter the dish name and its price.');return}
+ var go2=function(u){sb.from('cafe_products').insert({name:n,price:+pv,img_url:u||null}).then(function(r){if(r.error){alert('Could not save the dish.');return}loadMenu()})};
+ if(f)upload(f).then(go2,function(){alert('The photo could not be uploaded.')});else go2()}
+function updP(id,v){sb.from('cafe_products').update({price:+v||0}).eq('id',id).then(loadMenu)}
+function toggle(id,a){sb.from('cafe_products').update({active:a}).eq('id',id).then(loadMenu)}
+function delP(id){if(confirm('Delete this dish?'))sb.from('cafe_products').delete().eq('id',id).then(loadMenu)}
+function newPhoto(id,f){if(!f)return;upload(f).then(function(u){sb.from('cafe_products').update({img_url:u}).eq('id',id).then(loadMenu)},function(){alert('The photo could not be uploaded.')})}
+function qr(){var t=document.getElementById('qt').value.trim(),u=location.origin+'/'+(t?'?t='+encodeURIComponent(t):''),e=document.getElementById('qr');e.innerHTML='';new QRCode(e,{text:u,width:200,height:200});document.getElementById('qu').textContent=u}
+sb.auth.getSession().then(function(r){user=r.data.session?r.data.session.user:null;if(user)boot();else render()});
+render();
+</script>
+</body>
+</html>

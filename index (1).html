@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Order – Blu Rock Cafe</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eaf0f3;--card:#fbfdfe;--ink:#17214f;--mute:#5d6786;--line:#c9d4db;--acc:#e0a100;--accink:#17214f;--ok:#1d7a4d}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1530;--card:#171f45;--ink:#e9edff;--mute:#9aa5cf;--line:#2b366b;--acc:#f0b429;--accink:#10162f;--ok:#4cc38a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Bricolage Grotesque',system-ui,sans-serif;padding-bottom:160px}
+.wrap{max-width:760px;margin:0 auto;padding:16px;padding-top:max(16px,env(safe-area-inset-top))}
+h1{font-size:30px;font-weight:800;margin:0;letter-spacing:-.02em}h2{font-size:20px;margin:0 0 8px}
+.sub{color:var(--mute);font-size:14px}
+.dish{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px}
+.dish .t{flex:1}.dish img,.tile{width:84px;height:84px;border-radius:10px;object-fit:cover;flex:none}
+.tile{display:grid;place-items:center;background:var(--bg);border:1px dashed var(--line);font-size:30px;font-weight:800;color:var(--mute)}
+.qty{display:flex;align-items:center;gap:10px}.qty b{min-width:18px;text-align:center}
+button{font:700 16px inherit;font-family:inherit;cursor:pointer}
+.round{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.round.on{background:var(--acc);color:var(--accink);border-color:var(--acc)}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:2px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+.bar .in{max-width:760px;margin:0 auto}
+input{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.btn{width:100%;background:var(--acc);color:var(--accink);border:0;border-radius:10px;padding:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}
+input:focus-visible,button:focus-visible{outline:3px solid var(--acc);outline-offset:1px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+var sb=supabase.createClient(CFG.url,CFG.key),P=[],cart={},cn='',cp='',done=null,busy=false,loaded=false,fail=false;
+var T=(new URLSearchParams(location.search).get('t')||'').slice(0,10);
+function esc(t){return String(t==null?'':t).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function money(n){try{return new Intl.NumberFormat(undefined,{style:'currency',currency:CFG.cur,maximumFractionDigits:2}).format(n||0)}catch(e){return n}}
+function total(){var s=0;P.forEach(function(p){s+=(cart[p.id]||0)*p.price});return s}
+function count(){var s=0;P.forEach(function(p){s+=cart[p.id]||0});return s}
+function add(id,d){cart[id]=Math.max(0,(cart[id]||0)+d);render()}
+function render(){
+ var a=document.getElementById('app');
+ if(done){a.innerHTML='<div class="card" style="margin-top:30px"><h1>Thank you!</h1><p>Your order <b>#'+done.code+'</b> is placed.</p><p>Please pay <b>'+money(done.total)+'</b> at the counter. We will bring it'+(T?' to table '+esc(T):' to you')+' shortly.</p><button class="btn" onclick="done=null;render()">Order something else</button></div>';return}
+ var list=!loaded?'<p class="sub">Loading the menu…</p>':fail?'<p class="sub">The menu could not load. Please ask the staff.</p>':!P.length?'<p class="sub">The menu is empty right now.</p>':P.map(function(p){var q=cart[p.id]||0;
+  return '<div class="dish">'+(p.img_url?'<img src="'+esc(p.img_url)+'" alt="'+esc(p.name)+'">':'<div class="tile" aria-hidden="true">'+esc(p.name.charAt(0).toUpperCase())+'</div>')+'<div class="t"><b>'+esc(p.name)+'</b><div class="sub">'+money(p.price)+'</div></div><div class="qty">'+(q?'<button class="round" onclick="add(\''+p.id+'\',-1)" aria-label="Remove one '+esc(p.name)+'">−</button><b>'+q+'</b>':'')+'<button class="round on" onclick="add(\''+p.id+'\',1)" aria-label="Add one '+esc(p.name)+'">+</button></div></div>'}).join('');
+ var n=count();
+ a.innerHTML='<h1>'+esc(CFG.name)+'</h1><p class="sub">'+(T?'Table '+esc(T)+'. ':'')+'Choose what you want and place your order.</p><h2>Menu</h2>'+list
+ +(n?'<div class="bar"><div class="in"><div class="two"><input id="cn" placeholder="Your name" value="'+esc(cn)+'" oninput="cn=this.value" autocomplete="name"><input id="cp" placeholder="Phone (optional)" inputmode="tel" value="'+esc(cp)+'" oninput="cp=this.value" autocomplete="tel"></div><button class="btn" onclick="place()" '+(busy?'disabled':'')+'>Place order · '+n+(n>1?' items':' item')+' · '+money(total())+'</button></div></div>':'');
+}
+function place(){
+ var its=P.filter(function(p){return cart[p.id]}).map(function(p){return{id:p.id,name:p.name,qty:cart[p.id],price:p.price}});
+ if(!its.length)return;if(!cn.trim()){alert('Please enter your name.');return}
+ var id=crypto.randomUUID(),t=total();busy=true;render();
+ sb.from('cafe_orders').insert({id:id,customer_name:cn.trim().slice(0,60),phone:cp.trim().slice(0,20),table_no:T,items:its,total:t}).then(function(r){
+  busy=false;if(r.error){alert('The order could not be sent. Please try again or tell the staff.');render();return}
+  done={code:id.slice(0,4).toUpperCase(),total:t};cart={};render()});
+}
+sb.from('cafe_products').select('*').eq('active',true).order('created_at').then(function(r){loaded=true;if(r.error)fail=true;P=r.data||[];render()});
+render();
+</script>
+</body>
+</html>
